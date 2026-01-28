@@ -1,32 +1,32 @@
 from typing import List, Optional
 from fastapi import FastAPI, Query
-import geohash as pgh
-import re
 import sqlite3
 from llm import generate_answer_anthropic
 from schemas import ChatRequest, ChatResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os
 from pydantic import BaseModel
-from typing import List, Optional
+
+load_dotenv()  # loads .env into os.environ
+
+# ---------- Models (match your new data structure) ----------
 
 
-class ParkLocation(BaseModel):
+class PlaceLocation(BaseModel):
+    id: str
     name: str
     description: Optional[str] = None
-    lat: float
-    lng: float
+    latitude: float
+    longitude: float
     geohash: str
 
 
 class MapSearchResponse(BaseModel):
     count: int
-    results: List[ParkLocation]
+    results: List[PlaceLocation]
 
 
-load_dotenv()  # loads .env into os.environ
-
+# ---------- App ----------
 
 app = FastAPI(title="Neptou AI Backend (Anthropic)", version="1.0.0")
 
@@ -49,8 +49,6 @@ async def chat(req: ChatRequest):
     MAX_TURNS = 20
     history = req.history[-MAX_TURNS:]
 
-    print(req)
-
     response_text, followups = await generate_answer_anthropic(
         history=history,
         place=req.place_context,
@@ -59,45 +57,39 @@ async def chat(req: ChatRequest):
 
     return ChatResponse(response=response_text, follow_up_questions=followups)
 
-    # response_text = "Received your message."
-    # print(req)
 
-    # return ChatResponse(response=response_text, follow_up_questions=[])
-
-
-def parse_wkt(wkt_string: str):
-    """Extracts floats from Point(Lon Lat) format."""
-    # Note: Wikidata/WKT uses (Longitude Latitude)
-    match = re.findall(r"[-+]?\d*\.\d+|\d+", wkt_string)
-    if len(match) >= 2:
-        return float(match[1]), float(match[0])  # Returns (Lat, Lng)
-    return 0.0, 0.0
-
+# ---------- Map Search (updated to new columns) ----------
 
 @app.get("/api/map/search", response_model=MapSearchResponse)
-async def search_parks(hash_prefix: str = Query(..., min_length=1)):
-    conn = sqlite3.connect('places.db')
+async def search_places(hash_prefix: str = Query(..., min_length=1)):
+    conn = sqlite3.connect("places_clean.db")
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
-    # Optimized prefix search
-    query = "SELECT parkLabel, parkDescription, coord, geohash FROM places WHERE geohash LIKE ?"
+    # Your table must contain these columns:
+    # id, name, description, latitude, longitude, geohash
+    query = """
+        SELECT id, name, description, latitude, longitude, geohash
+        FROM places
+        WHERE geohash LIKE ?
+    """
     cursor.execute(query, (f"{hash_prefix}%",))
-
     rows = cursor.fetchall()
     conn.close()
 
-    park_list = []
+    results: List[PlaceLocation] = []
     for row in rows:
-        lat, lng = parse_wkt(row['coord'])
+        results.append(
+            PlaceLocation(
+                id=str(row["id"]),
+                name=row["name"],
+                description=row["description"],
+                latitude=float(
+                    row["latitude"]) if row["latitude"] is not None else 0.0,
+                longitude=float(
+                    row["longitude"]) if row["longitude"] is not None else 0.0,
+                geohash=row["geohash"],
+            )
+        )
 
-        # Instantiate the Pydantic model
-        park_list.append(ParkLocation(
-            name=row['parkLabel'],
-            description=row['parkDescription'],
-            lat=lat,
-            lng=lng,
-            geohash=row['geohash']
-        ))
-
-    return MapSearchResponse(count=len(park_list), results=park_list)
+    return MapSearchResponse(count=len(results), results=results)
