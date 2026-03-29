@@ -1,0 +1,1 @@
+"""Neptou FastAPI backend package."""

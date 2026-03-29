@@ -88,3 +88,19 @@ class ItineraryPayload(BaseModel):
 
 class OptimizeRequest(BaseModel):
     itinerary: ItineraryPayload
+
+
+# --- Map ---
+
+class PlaceLocation(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    latitude: float
+    longitude: float
+    geohash: str
+
+
+class MapSearchResponse(BaseModel):
+    count: int
+    results: List[PlaceLocation]

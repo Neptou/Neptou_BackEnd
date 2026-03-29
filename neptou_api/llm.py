@@ -3,9 +3,13 @@ import json
 from typing import List, Optional, Tuple
 
 from anthropic import AsyncAnthropic
-from schemas import (
-    ChatMessage, PlaceContext, FoodContext,
-    RecommendationRequest, PlaceRecommendation,
+
+from neptou_api.schemas import (
+    ChatMessage,
+    PlaceContext,
+    FoodContext,
+    RecommendationRequest,
+    PlaceRecommendation,
     OptimizeRequest,
 )
 
@@ -38,23 +42,14 @@ def build_system_prompt(place: Optional[PlaceContext], food: Optional[FoodContex
 
 
 def to_anthropic_messages(history: List[ChatMessage]) -> List[dict]:
-    """
-    Anthropic Messages API uses roles: 'user' and 'assistant'.
-    We'll pass your history through directly.
-    """
     return [{"role": m.role, "content": m.content} for m in history]
 
 
 def _safe_parse_json(text: str) -> dict:
-    """
-    Claude usually obeys JSON-only if prompted, but this adds a safety net.
-    """
     text = text.strip()
 
-    # If it wrapped JSON in accidental fences, strip them
     if text.startswith("```"):
         text = text.strip("`")
-        # after stripping, it might still contain a language tag
         lines = text.splitlines()
         if lines and lines[0].lower().startswith("json"):
             text = "\n".join(lines[1:]).strip()
@@ -86,7 +81,6 @@ async def generate_answer_anthropic(
         temperature=0.7,
     )
 
-    # Anthropic returns content blocks; we want the combined text
     text_out = ""
     for block in resp.content:
         if block.type == "text":
@@ -98,7 +92,6 @@ async def generate_answer_anthropic(
     followups = data.get("follow_up_questions") or []
     followups = [str(x).strip() for x in followups if str(x).strip()]
 
-    # Final fallback
     if not response_text:
         response_text = "Sorry — I couldn’t generate a response right now."
 
@@ -162,19 +155,19 @@ async def generate_recommendations_anthropic(
     for item in data[:7]:
         if not isinstance(item, dict) or "name" not in item:
             continue
-        recs.append(PlaceRecommendation(
-            name=str(item.get("name", "")),
-            reason=str(item.get("reason", "Recommended for you")),
-            match_score=min(max(float(item.get("match_score", 0.8)), 0.0), 1.0),
-            category=str(item.get("category", "")),
-            is_hidden_gem=bool(item.get("is_hidden_gem", False)),
-        ))
+        recs.append(
+            PlaceRecommendation(
+                name=str(item.get("name", "")),
+                reason=str(item.get("reason", "Recommended for you")),
+                match_score=min(max(float(item.get("match_score", 0.8)), 0.0), 1.0),
+                category=str(item.get("category", "")),
+                is_hidden_gem=bool(item.get("is_hidden_gem", False)),
+            )
+        )
     return recs
 
 
-async def generate_optimized_itinerary_anthropic(
-    req: OptimizeRequest,
-) -> dict:
+async def generate_optimized_itinerary_anthropic(req: OptimizeRequest) -> dict:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set")
