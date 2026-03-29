@@ -30,3 +30,61 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     follow_up_questions: List[str] = Field(default_factory=list)
+
+
+# --- Recommendations ---
+
+class RecommendationRequest(BaseModel):
+    name: str = ""
+    travel_style: str = "Mixed"
+    interests: List[str] = Field(default_factory=list)
+    liked_places: List[str] = Field(default_factory=list)
+
+
+class PlaceRecommendation(BaseModel):
+    name: str
+    reason: str
+    match_score: float
+    category: str
+    is_hidden_gem: bool = False
+
+
+# --- Search ---
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class SearchResult(BaseModel):
+    name: str
+    category: str = ""
+    area: str = ""
+    similarity_score: float = 0.0
+
+
+class SearchResponse(BaseModel):
+    results: List[SearchResult]
+
+
+# --- Optimize Itinerary ---
+
+class ActivityPayload(BaseModel):
+    place_name: str
+    notes: str = ""
+    start_time: str = ""
+    end_time: str = ""
+
+
+class DayPayload(BaseModel):
+    day_number: int
+    activities: List[ActivityPayload] = Field(default_factory=list)
+
+
+class ItineraryPayload(BaseModel):
+    name: str = "Nepal Adventure"
+    days: List[DayPayload] = Field(default_factory=list)
+
+
+class OptimizeRequest(BaseModel):
+    itinerary: ItineraryPayload
